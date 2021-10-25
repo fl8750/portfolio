@@ -23,19 +23,35 @@ function ExamineVideo {
         foreach ($vFile in (Get-ChildItem -Path $SrcPath -File -Recurse)) {
             #$vFile = $_
             $vfExtension = (Split-Path $vFile.FullName -extension)
-            $vfPathMid = $vFile.DirectoryName.Substring($SPath.Length)
-            $OVideoPath = $DPath+'\'+$vfPathMid+'\'+$vFile.Name
+            $vfPathMid = $vFile.DirectoryName.Substring($SPath.Length) -replace '^\\',''
+            $OVideoFile = $DPath+'\'+$vfPathMid+'\'+$vFile.Name
             $OVideoDirPath = $DPath+'\'+$vfPathMid
+
+            $OVideoOutFile = $OVideoFile -replace (Split-Path $OVideoFile -extension), '.mp4'
+            $OVideoErrFile = $OVideoFile -replace (Split-Path $OVideoFile -extension), '.txt'
+
 
             if ((Test-Path $OVideoDirPath) -eq $False) {
                 New-Item -Path $OVideoDirPath -ItemType Directory -ErrorAction Stop | Out-Null
             }
+            # elseif ((Test-Path $OVideoOutFile) -eq $True) {
+            #     Write-Verbose "--- Skip existing file: $($OVideoOutFile)"
+            #     Continue
+            # }
+
 
             if ($vfExtension -in $targetExtensions) {
                 Write-Host "OK!   $($vFile.FullName)"
+                if ((Test-Path $OVideoOutFile) -eq $True) {
+                    Write-Verbose "--- Existing file: $($OVideoOutFile)"
+                    Remove-Item -path $OVideoOutFile
+                    Remove-Item -path $OVideoErrFile
+                    #Continue
+                }
             }
             elseif ($vfExtension -in $copyExtensions) {
                 Write-Host "Copy  $($vFile.FullName)"
+                Copy-item -Path $vFile -Destination $OVideoFile -Force
                 continue
             }
             else {
@@ -117,9 +133,11 @@ function ExamineVideo {
 
             # Now examine the video attributes
 
-            $strmVideo = ($vInfo.streams | Where-Object codec_type -eq 'video')
+            $strmVideo = ($vInfo.streams | Where-Object codec_type -eq 'video' | Sort-Object -Descending bit_rate | Select-Object -First 1 )
             try {
                 $vFileVideo = [PSCustomObject]@{
+                    Index = $strmVideo.index
+                    Mapping = "-map 0:$($strmVideo.index)"
                     CodecName = $strmVideo.codec_name
                     CodecLongName = $strmVideo.codec_long_name
                     Width = $strmVideo.width
@@ -133,6 +151,7 @@ function ExamineVideo {
                     Duration = $strmVideo.duration
                     BitRate = $strmVideo.bit_rate
                     NbFrames = $strmVideo.nb_frames
+
                 }
             }
             catch {
@@ -143,6 +162,9 @@ function ExamineVideo {
             $strmAudio = ($vInfo.streams | Where-Object codec_type -eq 'audio')
             if ($strmAudio) {
                 $vFileAudio = [PSCustomObject]@{
+                    Index = $strmAudio.index
+                    Mapping = "-map 0:$($strmAudio.index)"
+                    NewCodec = "mp3"
                     CodecName = $strmAudio.codec_name
                     CodecLongName = $strmAudio.codec_long_name
                     CodecTimeBase = $strmAudio.time_base
@@ -177,6 +199,7 @@ function ExamineVideo {
             #   Start building the filter chain we will need for this video
             #
             $oFilters = @();
+            $oFilters += "hwupload_cuda"
 
 
             #   Now test the video for any cropping needs
@@ -186,67 +209,38 @@ function ExamineVideo {
 
             }
 
-            IF ($vInterlace.Interlaced -NE 0) {
-                $oFilter += "yadif_cuda:mode=1:parity:auto:deint:0"
+            IF ($vInterlace.Interlaced -ne 0) {
+                $oFilters += "yadif_cuda=1:0:1"
             }
 
+            #   Figure out the output audio
+            #
+            if ($vFileAudio.Channels -le 2) {
+                $audioOptions = "-b:a 320000 "
+            }
 
 
             # Now create an FFMPEG filter chain from the individual oFilter entries
             #
-            $OVideoPath = Join-Path -Path $DestPath -ChildPath (Split-Path $SrcPath -Leaf)
-            $OVideoPath = $OVideoPath -replace (Split-Path $SrcPath -extension), '.mp4'
-            $oFilter = '-vf "' + ($oFilters -join ',') + '" '
+            if ($oFilters.Count -gt 0) {
+                $oFilter = '-vf:v "' + ($oFilters -join ',') + '" 'llllllllllllkkkkkkkkkk
+            }
 
-            $ArgumentList = '-hwaccel_output_format cuda -i "' + $VideoPath + '" ' + $oFilter + '-c:v hevc_nvenc -preset slow -rc vbr_hq -cbr 24 "' + $OVideoPath + '"'
+            $ArgumentList = '-hwaccel_output_format cuda -i "' + $vFile.FullName + '"' + " -map 0:$($vFileVideo.Index) -map 0:$($vFileAudio.Index) " + # -map 0:v:1 -map 0:a:0
+                            $oFilter + "-c:v hevc_nvenc -preset slow -rc vbr -rc-lookahead 100 -2pass 1 -b:v $($vFileVideo.BitRate/2) " +
+                            "-c:a aac " +
+                            "-y " + '"' + $OVideoOutFile + '"'
 
             $VerbosePreference="continue"
             Write-Verbose "FFmpeg; $($ArgumentList)"
-
-                Start-Process -FilePath ffmpeg -ArgumentList $ArgumentList -Wait -NoNewWindow
+            Start-Process -FilePath ffmpeg -ArgumentList $ArgumentList -Wait -NoNewWindow -RedirectStandardError $OVideoErrFile
             $a = 1
         }
 
-
-
-
-
-
-
-
-        #  Now use FFMPEG to scan portions of the video to find the cropping bounds
-        #
-        # $Flen = $vinfo.format.duration
-        # $CLen = [Math]::Floor($Flen / 2)
-        # if ($CLen -gt 120) { $Clen = 120}
-
-        # $fps = (Invoke-expression $vinfo.streams[0].avg_frame_rate)
-
-        # $STDOUT_FILE = Join-Path -Path $($tempDir) -ChildPath "stdout.txt"
-        # $ArgumentList = "-i `"$($VideoPath)`" -ss $($Clen) -vframes 10 -vf cropdetect -f null out.mkv "
-        # Start-Process -FilePath ffmpeg -ArgumentList $ArgumentList -Wait -NoNewWindow -RedirectStandardError $STDOUT_FILE
-
-        # Get-Content -LiteralPath $STDOUT_FILE | Where-Object { $_.Length -gt 18 -and $_.Substring(0,18) -ieq '[Parsed_cropdetect' } | Select-Object {
-        #         $global:cropSize = (($_.Split(" "))[13]).Split("=")[1]
-        # }
-        # Remove-Item $STDOUT_FILE
-
-        #  Now build the options and parameters needed to do the final transcode operation
-        #
-    #     $oFilters = @();
-    #     #$oFilters += 'yadif=1:-1:0'
-    #     $oFilters += 'crop=' + $cropSize
-    #     $oFilters += 'scale_cuda=w=1024:h=720:force_original_aspect_ratio=decrease'
-
-
-    # # yadif=1:-1:0,scale=w=1024:h=720:force_original_aspect_ratio=decrease,crop=' + $crop
-
-    #     $OVideoPath = Join-Path -Path $DestPath -ChildPath (Split-Path $SrcPath -Leaf)
-    #     $OVideoPath = $OVideoPath -replace (Split-Path $SrcPath -extension), '.mp4'
-    #     $oFilter = '-vf "' + ($oFilters -join ',') + '" '
     }
 
 }
 
-ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\A\" -rDepth 0 -DestPath "C:\Temp"
+ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew\"
+#ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpgFlat" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew"
 $a = "Stop"
