@@ -13,9 +13,24 @@ function ExamineVideo {
     Begin {
         $targetExtensions = @('.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mp4','.mpe','.mpg','.mpeg','.rm',',ram','.wmv','.ts','.vob')
         $copyExtensions   = @('.jpg','.jpeg','.gif')
-        Get-ChildItem -Path $SrcPath -File | Select-Object {
-            $vFile = $_
-            $vfExtension = (Split-Path $_.FullName -extension)
+
+
+        $SPathInfo = Get-ItemProperty -path $SrcPath
+        $SPath = $SPathInfo.FullName
+        $DPathInfo = Get-ItemProperty -path $DestPath
+        $DPath = $DPathInfo.FullName
+
+        foreach ($vFile in (Get-ChildItem -Path $SrcPath -File -Recurse)) {
+            #$vFile = $_
+            $vfExtension = (Split-Path $vFile.FullName -extension)
+            $vfPathMid = $vFile.DirectoryName.Substring($SPath.Length)
+            $OVideoPath = $DPath+'\'+$vfPathMid+'\'+$vFile.Name
+            $OVideoDirPath = $DPath+'\'+$vfPathMid
+
+            if ((Test-Path $OVideoDirPath) -eq $False) {
+                New-Item -Path $OVideoDirPath -ItemType Directory -ErrorAction Stop | Out-Null
+            }
+
             if ($vfExtension -in $targetExtensions) {
                 Write-Host "OK!   $($vFile.FullName)"
             }
@@ -27,11 +42,6 @@ function ExamineVideo {
                 Write-Host "No    $($vFile.FullName)"
                 continue
             }
-
-            #   Prepare the full source and destination path
-            $OVideoPath = Join-Path -Path $DestPath -ChildPath (Split-Path $SrcPath -Leaf)
-            $OVideoPath = $OVideoPath -replace (Split-Path $SrcPath -extension), '.mp4'
-
 
 
             #   Detect any interlacing in the video
@@ -176,6 +186,24 @@ function ExamineVideo {
 
             }
 
+            IF ($vInterlace.Interlaced -NE 0) {
+                $oFilter += "yadif_cuda:mode=1:parity:auto:deint:0"
+            }
+
+
+
+            # Now create an FFMPEG filter chain from the individual oFilter entries
+            #
+            $OVideoPath = Join-Path -Path $DestPath -ChildPath (Split-Path $SrcPath -Leaf)
+            $OVideoPath = $OVideoPath -replace (Split-Path $SrcPath -extension), '.mp4'
+            $oFilter = '-vf "' + ($oFilters -join ',') + '" '
+
+            $ArgumentList = '-hwaccel_output_format cuda -i "' + $VideoPath + '" ' + $oFilter + '-c:v hevc_nvenc -preset slow -rc vbr_hq -cbr 24 "' + $OVideoPath + '"'
+
+            $VerbosePreference="continue"
+            Write-Verbose "FFmpeg; $($ArgumentList)"
+
+                Start-Process -FilePath ffmpeg -ArgumentList $ArgumentList -Wait -NoNewWindow
             $a = 1
         }
 
@@ -205,20 +233,20 @@ function ExamineVideo {
 
         #  Now build the options and parameters needed to do the final transcode operation
         #
-        $oFilters = @();
-        #$oFilters += 'yadif=1:-1:0'
-        $oFilters += 'crop=' + $cropSize
-        $oFilters += 'scale_cuda=w=1024:h=720:force_original_aspect_ratio=decrease'
+    #     $oFilters = @();
+    #     #$oFilters += 'yadif=1:-1:0'
+    #     $oFilters += 'crop=' + $cropSize
+    #     $oFilters += 'scale_cuda=w=1024:h=720:force_original_aspect_ratio=decrease'
 
 
-    # yadif=1:-1:0,scale=w=1024:h=720:force_original_aspect_ratio=decrease,crop=' + $crop
+    # # yadif=1:-1:0,scale=w=1024:h=720:force_original_aspect_ratio=decrease,crop=' + $crop
 
-        $OVideoPath = Join-Path -Path $DestPath -ChildPath (Split-Path $SrcPath -Leaf)
-        $OVideoPath = $OVideoPath -replace (Split-Path $SrcPath -extension), '.mp4'
-        $oFilter = '-vf "' + ($oFilters -join ',') + '" '
+    #     $OVideoPath = Join-Path -Path $DestPath -ChildPath (Split-Path $SrcPath -Leaf)
+    #     $OVideoPath = $OVideoPath -replace (Split-Path $SrcPath -extension), '.mp4'
+    #     $oFilter = '-vf "' + ($oFilters -join ',') + '" '
     }
 
 }
 
-ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\A\Alexis Love" -rDepth 0 -DestPath "C:\Temp"
+ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\A\" -rDepth 0 -DestPath "C:\Temp"
 $a = "Stop"
