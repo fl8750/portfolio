@@ -11,7 +11,7 @@ function ExamineVideo {
  # -Recurse -file -include *.avi,*.divx,*.flv,*.m1v,*.m4v,*.mkv,*.mov,*.mp4,*.mpe,*.mpg,*.mpeg,*.rm,*.wmv
 
     Begin {
-        $targetExtensions = @('.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mp4','.mpe','.mpg','.mpeg','.rm',',ram','.wmv','.ts','.vob')
+        $targetExtensions = @('.mpg','.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mp4','.mpe','.mpeg','.rm',',ram','.wmv','.ts','.vob')
         $copyExtensions   = @('.jpg','.jpeg','.gif')
 
 
@@ -27,8 +27,8 @@ function ExamineVideo {
             $OVideoFile = $DPath+'\'+$vfPathMid+'\'+$vFile.Name
             $OVideoDirPath = $DPath+'\'+$vfPathMid
 
-            $OVideoOutFile = $OVideoFile -replace (Split-Path $OVideoFile -extension), '.mp4'
-            $OVideoErrFile = $OVideoFile -replace (Split-Path $OVideoFile -extension), '.txt'
+            $OVideoOutFile = $OVideoFile -replace "\$(Split-Path $OVideoFile -extension)", '.mp4'
+            $OVideoErrFile = $OVideoFile -replace "\$(Split-Path $OVideoFile -extension)", '.txt'
 
 
             if ((Test-Path $OVideoDirPath) -eq $False) {
@@ -44,9 +44,9 @@ function ExamineVideo {
                 Write-Host "OK!   $($vFile.FullName)"
                 if ((Test-Path $OVideoOutFile) -eq $True) {
                     Write-Verbose "--- Existing file: $($OVideoOutFile)"
-                    Remove-Item -path $OVideoOutFile
-                    Remove-Item -path $OVideoErrFile
-                    #Continue
+                    #Remove-Item -path $OVideoOutFile
+                    #Remove-Item -path $OVideoErrFile
+                    Continue
                 }
             }
             elseif ($vfExtension -in $copyExtensions) {
@@ -219,15 +219,25 @@ function ExamineVideo {
                 $audioOptions = "-b:a 320000 "
             }
 
+            #   Get video bitrate
+            #
+            if ($vFileVideo.BitRate -ne $null) {
+                $videoBR = [Math]::Floor($vFileVideo.BitRate/2)
+            }
+            else {
+                $videoBR = [Math]::Floor((($vFile.length * 0.7) * 8) / $vFileVideo.duration) / 2
+            }
+            if ($videoBR -gt 1000000) {$videoBR = 1000000}
+
 
             # Now create an FFMPEG filter chain from the individual oFilter entries
             #
             if ($oFilters.Count -gt 0) {
-                $oFilter = '-vf:v "' + ($oFilters -join ',') + '" 'llllllllllllkkkkkkkkkk
+                $oFilter = '-vf:v "' + ($oFilters -join ',') + '" '
             }
 
             $ArgumentList = '-hwaccel_output_format cuda -i "' + $vFile.FullName + '"' + " -map 0:$($vFileVideo.Index) -map 0:$($vFileAudio.Index) " + # -map 0:v:1 -map 0:a:0
-                            $oFilter + "-c:v hevc_nvenc -preset slow -rc vbr -rc-lookahead 100 -2pass 1 -b:v $($vFileVideo.BitRate/2) " +
+                            $oFilter + "-c:v hevc_nvenc -preset slow -rc vbr -rc-lookahead 100 -2pass 1 -b:v $($videoBR) " +
                             "-c:a aac " +
                             "-y " + '"' + $OVideoOutFile + '"'
 
