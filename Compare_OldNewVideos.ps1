@@ -1,5 +1,5 @@
 ﻿
-function CompareOldNewVideo {
+function Compare-OldNewVideos {
 
     Param (
             [string] $SrcPath,
@@ -252,6 +252,6 @@ function CompareOldNewVideo {
 
 }
 
-CompareOldNewVideo -SrcPath "X:\System\tmp\mpg\tmpg\" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew\"
+Compare-OldNewVideos -SrcPath "X:\System\tmp\mpg\tmpg\" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew\"
 #ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpgFlat" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew"
 $a = "Stop"
