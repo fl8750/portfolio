@@ -11,8 +11,8 @@ function ExamineVideo {
  # -Recurse -file -include *.avi,*.divx,*.flv,*.m1v,*.m4v,*.mkv,*.mov,*.mp4,*.mpe,*.mpg,*.mpeg,*.rm,*.wmv
 
     Begin {
-        $targetExtensions = @('.mpg','.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mp4','.mpe','.mpeg','.rm',',ram','.wmv','.ts','.vob')
-        $copyExtensions   = @('.jpg','.jpeg','.gif')
+        $targetExtensions = @('.mpg','.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mpe','.mpeg','.rm',',ram','.wmv','.ts')
+        $copyExtensions   = @('.jpg','.jpeg','.gif','.mp4')
 
 
         $SPathInfo = Get-ItemProperty -path $SrcPath
@@ -24,14 +24,14 @@ function ExamineVideo {
             #$vFile = $_
             $vfExtension = (Split-Path $vFile.FullName -extension)
             $vfPathMid = $vFile.DirectoryName.Substring($SPath.Length) -replace '^\\',''
-            $OVideoFile = $DPath+'\'+$vfPathMid+'\'+$vFile.Name
+            $OVideoFile = ($DPath+'\'+$vfPathMid+'\'+$vFile.Name) -replace '\ \.','.'
             $OVideoDirPath = $DPath+'\'+$vfPathMid
 
             $OVideoOutFile = $OVideoFile -replace "\$(Split-Path $OVideoFile -extension)", '.mp4'
-            $OVideoErrFile = $OVideoFile -replace "\$(Split-Path $OVideoFile -extension)", '.txt'
+            $OVideoErrFile = ($OVideoFile -replace "\$(Split-Path $OVideoFile -extension)", '.txt').Replace('[','').Replace(']','')
 
 
-            if ((Test-Path $OVideoDirPath) -eq $False) {
+            if ((Test-Path -LiteralPath $OVideoDirPath) -eq $False) {
                 New-Item -Path $OVideoDirPath -ItemType Directory -ErrorAction Stop | Out-Null
             }
             # elseif ((Test-Path $OVideoOutFile) -eq $True) {
@@ -42,7 +42,7 @@ function ExamineVideo {
 
             if ($vfExtension -in $targetExtensions) {
                 Write-Host "OK!   $($vFile.FullName)"
-                if ((Test-Path $OVideoOutFile) -eq $True) {
+                if ((Test-Path -LiteralPath $OVideoOutFile) -eq $True) {
                     Write-Verbose "--- Existing file: $($OVideoOutFile)"
                     #Remove-Item -path $OVideoOutFile
                     #Remove-Item -path $OVideoErrFile
@@ -51,7 +51,9 @@ function ExamineVideo {
             }
             elseif ($vfExtension -in $copyExtensions) {
                 Write-Host "Copy  $($vFile.FullName)"
-                Copy-item -Path $vFile -Destination $OVideoFile -Force
+                if ($vfExtension -eq '.mp4' -and (Test-Path -LiteralPath $OVideoOutFile)) {continue}
+
+                Copy-item -LiteralPath $vFile -Destination $OVideoFile -Force
                 continue
             }
             else {
@@ -151,7 +153,6 @@ function ExamineVideo {
                     Duration = $strmVideo.duration
                     BitRate = $strmVideo.bit_rate
                     NbFrames = $strmVideo.nb_frames
-
                 }
             }
             catch {
@@ -251,6 +252,7 @@ function ExamineVideo {
 
 }
 
-ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew\"
+ExamineVideo -SrcPath "X:\System\tmp\_download" -rDepth 0 -DestPath "Y:\system\tmp\X\_download"
+#ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew\"
 #ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpgFlat" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew"
 $a = "Stop"
