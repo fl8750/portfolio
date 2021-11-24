@@ -3,7 +3,7 @@ function ExamineVideo {
 
     Param (
             [string] $SrcPath,
-            [int] $rDepth = 0,
+            [int] $Copy = 0,
             [string] $DestPath,
             [string] $TempDir = "C:\Temp"
     )
@@ -11,16 +11,17 @@ function ExamineVideo {
  # -Recurse -file -include *.avi,*.divx,*.flv,*.m1v,*.m4v,*.mkv,*.mov,*.mp4,*.mpe,*.mpg,*.mpeg,*.rm,*.wmv
 
     Begin {
-        $targetExtensions = @('.mpg','.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mpe','.mpeg','.rm',',ram','.wmv','.ts')
-        $copyExtensions   = @('.jpg','.jpeg','.gif','.mp4')
-
+        $targetExtensions = @('.mpg','.asf','.avi','.divx','.flv','.m1v','.m2v','.m4v','.mkv','.mov','.mp4','.mpe','.mpeg','.rm',',ram','.wmv','.ts')
+        if ($Copy -ne 0) {
+            $copyExtensions   = @('.jpg','.jpeg','.gif')
+        }
 
         $SPathInfo = Get-ItemProperty -path $SrcPath
         $SPath = $SPathInfo.FullName
         $DPathInfo = Get-ItemProperty -path $DestPath
         $DPath = $DPathInfo.FullName
 
-        foreach ($vFile in (Get-ChildItem -Path $SrcPath -File -Recurse)) {
+        foreach ($vFile in (Get-ChildItem -Path $SrcPath -File -recurse)) {
             #$vFile = $_
             $vfExtension = (Split-Path $vFile.FullName -extension)
             $vfPathMid = $vFile.DirectoryName.Substring($SPath.Length) -replace '^\\',''
@@ -34,10 +35,10 @@ function ExamineVideo {
             if ((Test-Path -LiteralPath $OVideoDirPath) -eq $False) {
                 New-Item -Path $OVideoDirPath -ItemType Directory -ErrorAction Stop | Out-Null
             }
-            # elseif ((Test-Path $OVideoOutFile) -eq $True) {
-            #     Write-Verbose "--- Skip existing file: $($OVideoOutFile)"
-            #     Continue
-            # }
+            elseif ((Test-Path $OVideoOutFile) -eq $True) {
+                Write-Verbose "--- Skip existing file: $($OVideoOutFile)"
+                Continue
+            }
 
 
             if ($vfExtension -in $targetExtensions) {
@@ -252,7 +253,7 @@ function ExamineVideo {
 
 }
 
-ExamineVideo -SrcPath "X:\System\tmp\_download" -rDepth 0 -DestPath "Y:\system\tmp\X\_download"
+ExamineVideo -SrcPath "W:\System\Tmp\_Downloads\_UnRar" -Copy 0 -DestPath "Y:\system\tmp\W\Download"
 #ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpg\" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew\"
 #ExamineVideo -SrcPath "X:\System\tmp\mpg\tmpgFlat" -rDepth 0 -DestPath "Y:\system\tmp\X\mpgNew"
 $a = "Stop"
